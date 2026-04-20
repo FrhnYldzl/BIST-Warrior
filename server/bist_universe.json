@@ -1,0 +1,159 @@
+{
+  "version": "2026-04-16",
+  "source": "static_fallback",
+  "description": "Geniş BIST evreni — Yıldız + Ana + Alt Pazar birleşik. universe_loader.refresh() ile dinamik güncellenebilir.",
+  "notes": [
+    "~380 ticker; likidite filtresi (MIN_LIQUIDITY_TRY) illikit olanları scan'de düşürecek.",
+    "yfinance format: .IS suffix zorunlu.",
+    "Sektör isimleri TR + kısa (Türkçe karakter yok → JSON güvenli).",
+    "Delist/askı durumu yfinance'de NaN döndürür, scanner onları atlar."
+  ],
+  "sector_map": {
+    "AKBNK.IS": "Bankacilik", "ALBRK.IS": "Bankacilik", "GARAN.IS": "Bankacilik",
+    "HALKB.IS": "Bankacilik", "ICBCT.IS": "Bankacilik", "ISATR.IS": "Bankacilik",
+    "ISBIR.IS": "Bankacilik", "ISBTR.IS": "Bankacilik", "ISCTR.IS": "Bankacilik",
+    "KLNMA.IS": "Bankacilik", "SKBNK.IS": "Bankacilik", "TSKB.IS": "Bankacilik",
+    "VAKBN.IS": "Bankacilik", "YKBNK.IS": "Bankacilik",
+
+    "AGHOL.IS": "Holding", "ALARK.IS": "Holding", "BERA.IS": "Holding",
+    "BRYAT.IS": "Holding", "DOHOL.IS": "Holding", "ECILC.IS": "Holding",
+    "GLYHO.IS": "Holding", "GSDHO.IS": "Holding", "HDFGS.IS": "Holding",
+    "IHLAS.IS": "Holding", "IHLGM.IS": "Holding", "KCHOL.IS": "Holding",
+    "NRHOL.IS": "Holding", "NTHOL.IS": "Holding", "POLHO.IS": "Holding",
+    "SAHOL.IS": "Holding", "SANKO.IS": "Holding", "UNLU.IS": "Holding",
+    "AVHOL.IS": "Holding", "EUHOL.IS": "Holding", "MZHLD.IS": "Holding",
+    "PEHOL.IS": "Holding",
+
+    "AKENR.IS": "Enerji", "AKFYE.IS": "Enerji", "AKSEN.IS": "Enerji",
+    "AHGAZ.IS": "Enerji", "AYDEM.IS": "Enerji", "AYEN.IS": "Enerji",
+    "AYGAZ.IS": "Enerji", "BASGZ.IS": "Enerji", "BIOEN.IS": "Enerji",
+    "ENJSA.IS": "Enerji", "ENSRI.IS": "Enerji", "ESEN.IS": "Enerji",
+    "EUPWR.IS": "Enerji", "GESAN.IS": "Enerji", "GWIND.IS": "Enerji",
+    "KONTR.IS": "Enerji", "MAGEN.IS": "Enerji", "MEPET.IS": "Enerji",
+    "NATEN.IS": "Enerji", "NTGAZ.IS": "Enerji", "ODAS.IS": "Enerji",
+    "QUAGR.IS": "Enerji", "SMRTG.IS": "Enerji", "TUPRS.IS": "Enerji",
+    "ZOREN.IS": "Enerji",
+
+    "PETKM.IS": "Petrokimya",
+
+    "AKSA.IS": "Kimya", "ALKIM.IS": "Kimya", "ALKA.IS": "Kimya",
+    "ARSAN.IS": "Kimya", "BAGFS.IS": "Kimya", "BFREN.IS": "Kimya",
+    "CUSAN.IS": "Kimya", "DYOBY.IS": "Kimya", "EGGUB.IS": "Kimya",
+    "EGPRO.IS": "Kimya", "GUBRF.IS": "Kimya", "HEKTS.IS": "Kimya",
+    "KORDS.IS": "Kimya", "SASA.IS": "Kimya", "SDTTR.IS": "Kimya",
+    "SELGD.IS": "Kimya", "BRKSN.IS": "Kimya",
+
+    "AEFES.IS": "Icecek", "CCOLA.IS": "Icecek", "TBORG.IS": "Icecek",
+
+    "ATAKP.IS": "Gida", "AVOD.IS": "Gida", "BANVT.IS": "Gida",
+    "EKIZ.IS": "Gida", "FRIGO.IS": "Gida", "KERVN.IS": "Gida",
+    "KNFRT.IS": "Gida", "KRSTL.IS": "Gida", "KRVGD.IS": "Gida",
+    "MERKO.IS": "Gida", "PETUN.IS": "Gida", "PINSU.IS": "Gida",
+    "PNSUT.IS": "Gida", "SELVA.IS": "Gida", "TATGD.IS": "Gida",
+    "TUKAS.IS": "Gida", "ULKER.IS": "Gida", "SELEC.IS": "Ilac",
+    "DEVA.IS": "Ilac", "ECZYT.IS": "Ilac", "LKMNH.IS": "Saglik",
+    "MPARK.IS": "Saglik",
+
+    "ADESE.IS": "Perakende", "BIMAS.IS": "Perakende", "BIZIM.IS": "Perakende",
+    "CRFSA.IS": "Perakende", "EBEBK.IS": "Perakende", "MAVI.IS": "Perakende",
+    "MGROS.IS": "Perakende", "SOKM.IS": "Perakende", "VAKKO.IS": "Perakende",
+
+    "ARCLK.IS": "Beyaz-Esya", "VESBE.IS": "Beyaz-Esya", "VESTL.IS": "Beyaz-Esya",
+    "SILVR.IS": "Beyaz-Esya",
+
+    "ASUZU.IS": "Otomotiv", "BRISA.IS": "Otomotiv", "DOAS.IS": "Otomotiv",
+    "EGEEN.IS": "Otomotiv", "ERBOS.IS": "Otomotiv", "FROTO.IS": "Otomotiv",
+    "JANTS.IS": "Otomotiv", "KARSN.IS": "Otomotiv", "OTKAR.IS": "Otomotiv",
+    "TOASO.IS": "Otomotiv", "TTRAK.IS": "Otomotiv", "KATMR.IS": "Otomotiv",
+    "PARSN.IS": "Otomotiv",
+
+    "BRSAN.IS": "Demir-Celik", "CEMAS.IS": "Demir-Celik", "CEMTS.IS": "Demir-Celik",
+    "EREGL.IS": "Demir-Celik", "ISDMR.IS": "Demir-Celik", "IZMDC.IS": "Demir-Celik",
+    "KRDMA.IS": "Demir-Celik", "KRDMB.IS": "Demir-Celik", "KRDMD.IS": "Demir-Celik",
+    "DMSAS.IS": "Demir-Celik", "DOKTA.IS": "Demir-Celik", "BURCE.IS": "Demir-Celik",
+
+    "AFYON.IS": "Cimento", "AKCNS.IS": "Cimento", "BASCM.IS": "Cimento",
+    "BSOKE.IS": "Cimento", "BTCIM.IS": "Cimento", "BUCIM.IS": "Cimento",
+    "CIMSA.IS": "Cimento", "CMBTN.IS": "Cimento", "CMENT.IS": "Cimento",
+    "GOLTS.IS": "Cimento", "KONYA.IS": "Cimento", "NUHCM.IS": "Cimento",
+    "OYAKC.IS": "Cimento",
+
+    "ASELS.IS": "Savunma",
+
+    "CLEBI.IS": "Havacilik", "PGSUS.IS": "Havacilik", "TAVHL.IS": "Havacilik",
+    "THYAO.IS": "Havacilik",
+
+    "TCELL.IS": "Telekom", "TTKOM.IS": "Telekom",
+
+    "ALCTL.IS": "Bilisim", "ARENA.IS": "Bilisim", "ARDYZ.IS": "Bilisim",
+    "DGATE.IS": "Bilisim", "DESPC.IS": "Bilisim", "EDATA.IS": "Bilisim",
+    "ESCOM.IS": "Bilisim", "FONET.IS": "Bilisim", "FORMT.IS": "Bilisim",
+    "HTTBT.IS": "Bilisim", "INDES.IS": "Bilisim", "INFO.IS": "Bilisim",
+    "INVEO.IS": "Bilisim", "KAREL.IS": "Bilisim", "KRONT.IS": "Bilisim",
+    "LINK.IS": "Bilisim", "LOGO.IS": "Bilisim", "MIATK.IS": "Bilisim",
+    "MOGAN.IS": "Bilisim", "MTRKS.IS": "Bilisim", "NETAS.IS": "Bilisim",
+    "PENTA.IS": "Bilisim", "PKART.IS": "Bilisim", "SMART.IS": "Bilisim",
+    "VBTYZ.IS": "Bilisim", "VERUS.IS": "Bilisim",
+
+    "SISE.IS": "Cam", "TRKCM.IS": "Cam", "ANACM.IS": "Cam", "DGGYO.IS": "GYO",
+
+    "AGESA.IS": "Sigorta", "AKGRT.IS": "Sigorta", "ANHYT.IS": "Sigorta",
+    "ANSGR.IS": "Sigorta", "RAYSG.IS": "Sigorta", "TURSG.IS": "Sigorta",
+
+    "CRDFA.IS": "Finans", "GARFA.IS": "Finans", "ISFIN.IS": "Finans",
+    "LIDFA.IS": "Finans", "VAKFN.IS": "Finans", "GEDIK.IS": "Finans",
+    "INVES.IS": "Finans", "ISMEN.IS": "Finans", "ISYAT.IS": "Finans",
+    "EUYO.IS": "Finans", "GRNYO.IS": "Finans", "ATSYH.IS": "Finans",
+    "OYAYO.IS": "Finans",
+
+    "AGYO.IS": "GYO", "AKFGY.IS": "GYO", "AKMGY.IS": "GYO", "AKSGY.IS": "GYO",
+    "ALGYO.IS": "GYO", "ATAGY.IS": "GYO", "AVGYO.IS": "GYO", "AVPGY.IS": "GYO",
+    "DZGYO.IS": "GYO", "EKGYO.IS": "GYO", "HLGYO.IS": "GYO", "IDGYO.IS": "GYO",
+    "ISGYO.IS": "GYO", "KGYO.IS": "GYO", "KLGYO.IS": "GYO", "KRGYO.IS": "GYO",
+    "KZBGY.IS": "GYO", "MHRGY.IS": "GYO", "MRGYO.IS": "GYO", "MSGYO.IS": "GYO",
+    "NUGYO.IS": "GYO", "OZGYO.IS": "GYO", "OZKGY.IS": "GYO", "PAGYO.IS": "GYO",
+    "PEGYO.IS": "GYO", "PEKGY.IS": "GYO", "PSGYO.IS": "GYO", "RYGYO.IS": "GYO",
+    "SNGYO.IS": "GYO", "SRVGY.IS": "GYO", "TDGYO.IS": "GYO", "TRGYO.IS": "GYO",
+    "VKGYO.IS": "GYO", "YGGYO.IS": "GYO", "YGYO.IS": "GYO", "ZRGYO.IS": "GYO",
+    "ASGYO.IS": "GYO",
+
+    "IPEKE.IS": "Madencilik", "KOZAA.IS": "Madencilik", "KOZAL.IS": "Madencilik",
+    "PRKME.IS": "Madencilik", "ALMAD.IS": "Madencilik",
+
+    "ENKAI.IS": "Insaat", "TKFEN.IS": "Insaat", "TEKTU.IS": "Insaat",
+    "ORGE.IS": "Insaat", "YYAPI.IS": "Insaat", "EDIP.IS": "Insaat",
+    "PAMEL.IS": "Insaat", "BAHKM.IS": "Insaat", "BORLS.IS": "Insaat",
+    "GENTS.IS": "Insaat",
+
+    "TMSN.IS": "Makine", "SARKY.IS": "Makine", "MAKIM.IS": "Makine",
+    "YBTAS.IS": "Makine", "DMRGD.IS": "Makine", "BORSK.IS": "Makine",
+    "EMKEL.IS": "Makine",
+
+    "KARTN.IS": "Ambalaj", "BAKAB.IS": "Ambalaj", "VANGD.IS": "Ambalaj",
+    "BOBET.IS": "Ambalaj", "BNTAS.IS": "Ambalaj",
+
+    "ARSAN.IS": "Tekstil", "ATEKS.IS": "Tekstil", "BOSSA.IS": "Tekstil",
+    "DERIM.IS": "Tekstil", "DESA.IS": "Tekstil", "KRTEK.IS": "Tekstil",
+    "LUKSK.IS": "Tekstil", "SKTAS.IS": "Tekstil", "SUWEN.IS": "Tekstil",
+    "YUNSA.IS": "Tekstil", "BLCYT.IS": "Tekstil", "MNDRS.IS": "Tekstil",
+    "KRPLS.IS": "Tekstil", "YATAS.IS": "Mobilya", "OZSUB.IS": "Mobilya",
+
+    "AYCES.IS": "Turizm", "MARTI.IS": "Turizm", "MAALT.IS": "Turizm",
+    "TEKTU.IS": "Turizm", "ULUFA.IS": "Turizm", "PLTUR.IS": "Turizm",
+    "PKENT.IS": "Turizm", "ULAS.IS": "Turizm",
+
+    "BJKAS.IS": "Spor", "FENER.IS": "Spor", "GSRAY.IS": "Spor",
+    "TSPOR.IS": "Spor",
+
+    "HURGZ.IS": "Medya", "IHGZT.IS": "Medya", "DGGYO.IS": "GYO",
+
+    "ADEL.IS": "Tuketim", "SERVE.IS": "Tuketim", "GOODY.IS": "Tuketim",
+    "GMTAS.IS": "Tuketim", "ORMA.IS": "Tuketim",
+
+    "BIENY.IS": "Kimya", "MAKTK.IS": "Gida", "EMNIS.IS": "Tekstil",
+    "METRO.IS": "Perakende", "MNDTR.IS": "Makine", "GEDZA.IS": "Ambalaj",
+    "EPLAS.IS": "Kimya", "SEKUR.IS": "Tekstil", "FADE.IS": "Gida",
+    "BRKVY.IS": "Kimya", "GEREL.IS": "Bilisim", "INTEM.IS": "Insaat",
+    "ERSU.IS": "Gida", "ETILR.IS": "Kimya"
+  }
+}
