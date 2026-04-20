@@ -1190,17 +1190,20 @@ tr.trade-self td:first-child {
 
 .hamburger {
   display: none;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--ink);
-  font-size: 18px;
+  background: var(--tr-red);
+  border: 1px solid var(--tr-red);
+  color: #fff;
+  font-size: 20px;
   line-height: 1;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 4px;
   cursor: pointer;
-  margin-right: 4px;
+  margin-right: 8px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
-.hamburger:hover { background: var(--surface); }
+.hamburger:hover { filter: brightness(1.15); }
+.hamburger:active { transform: scale(0.96); }
 .sidebar-overlay {
   display: none;
   position: fixed;
