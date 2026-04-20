@@ -1188,9 +1188,44 @@ tr.trade-self td:first-child {
 .midas-copy-all:hover { background: var(--tr-red); }
 .midas-copy-all.copied { background: var(--success); }
 
+.hamburger {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 4px;
+}
+.hamburger:hover { background: var(--surface); }
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 15;
+}
+
 @media (max-width: 920px) {
   .app { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
-  aside.sidebar { display: none; }
+  aside.sidebar {
+    display: flex;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 20;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    box-shadow: 4px 0 16px rgba(0,0,0,0.25);
+  }
+  .app.sidebar-open aside.sidebar { transform: translateX(0); }
+  .app.sidebar-open .sidebar-overlay { display: block; }
+  .hamburger { display: inline-flex; align-items: center; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .regime-grid { grid-template-columns: repeat(3, 1fr); }
   .plan-sections { grid-template-columns: 1fr; }
@@ -1201,7 +1236,9 @@ tr.trade-self td:first-child {
 </head>
 <body>
 <div class="app">
+  <div class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
   <header class="topbar">
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menüyü aç">☰</button>
     <div class="pill pill-red pill-dot live">BIST WARRIOR</div>
     <div class="pill pill-muted" title="Midas destekli analyst mode">⚔️ with MIDAS</div>
     <div class="pill pill-muted" id="regime-pill">REJİM: --</div>
@@ -2238,6 +2275,20 @@ Gün içi    → 🎯 AKTİF POZİSYONLAR: canlı fiyat (30s), TP/SL yakınlık 
 <script>
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+function toggleSidebar(force) {
+  const app = document.querySelector('.app');
+  if (!app) return;
+  if (force === false) app.classList.remove('sidebar-open');
+  else if (force === true) app.classList.add('sidebar-open');
+  else app.classList.toggle('sidebar-open');
+}
+document.addEventListener('click', (e) => {
+  const item = e.target.closest('.nav-item');
+  if (item && window.matchMedia('(max-width: 920px)').matches) {
+    toggleSidebar(false);
+  }
+});
 
 const fmtTRY = (v) => '₺' + Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtInt = (v) => Number(v).toLocaleString('tr-TR');

@@ -27,6 +27,23 @@ _env_vals = dotenv_values(_env_path)
 
 def _get(key): return os.getenv(key) or _env_vals.get(key, "")
 
+# Gemini key'i birden fazla isimde eklenmiş olabilir — hepsini destekle.
+_GEMINI_KEY_NAMES = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GEMINI_API_KEY",
+    "GEMINI_KEY",
+)
+
+
+def _get_gemini_key() -> str:
+    for name in _GEMINI_KEY_NAMES:
+        val = _get(name)
+        if val:
+            return val
+    return ""
+
+
 # ─── Son audit sonuçları (dashboard için) ─────────────────────────
 _last_audit: dict = {
     "status": "Henüz audit yapılmadı",
@@ -40,8 +57,8 @@ def get_last_audit() -> dict:
 
 
 def is_enabled() -> bool:
-    """Gemini API key tanımlı mı?"""
-    return bool(_get("GEMINI_API_KEY"))
+    """Gemini API key tanımlı mı? (birkaç ad varyantını destekler)"""
+    return bool(_get_gemini_key())
 
 
 def audit_decisions(
@@ -62,7 +79,7 @@ def audit_decisions(
     """
     global _last_audit
 
-    api_key = _get("GEMINI_API_KEY")
+    api_key = _get_gemini_key()
     if not api_key:
         _last_audit = {"status": "GEMINI_API_KEY tanımlı değil", "timestamp": datetime.now(timezone.utc).isoformat(), "results": []}
         return []
