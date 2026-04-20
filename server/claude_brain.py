@@ -179,7 +179,7 @@ Kredili Aktif: {'✓ EVET (gün-içi kapanmalı)' if plan.get('credit_enabled') 
     try:
         message = client.messages.create(
             model=MODEL,
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -514,7 +514,15 @@ def _format_momentum_ranking(market_data: dict) -> str:
 # ─────────────────────────────────────────────────────────────────
 
 def _extract_json(text: str) -> dict:
-    """Claude çıktısından JSON bloğu çıkarır — hata toleranslı."""
+    """Claude çıktısından JSON bloğu çıkarır — hata toleranslı.
+
+    Strateji:
+      1. ```json ... ``` code block varsa al
+      2. İlk '{' den son '}' ye kırp
+      3. Strict parse
+      4. Trailing comma temizle + retry
+      5. Kesilmiş (truncated) JSON için bracket balance + retry
+    """
     import re
 
     code_block = re.search(r'```(?:json)?\s*\n?(.*?)```', text, re.DOTALL)
@@ -529,11 +537,64 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        cleaned = re.sub(r',\s*([}\]])', r'\1', text)
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            raise
+        pass
+
+    cleaned = re.sub(r',\s*([}\]])', r'\1', text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    return json.loads(_balance_json(cleaned))
+
+
+def _balance_json(text: str) -> str:
+    """Kesilmiş JSON'u tamir eder: açık string'i kapat, eksik ']'/'}' ekle,
+    son virgülü temizle. Claude max_tokens'a dayandığında truncate olan
+    response'ları kurtarmak için."""
+    i = 0
+    in_string = False
+    escape = False
+    stack: list[str] = []  # '{' ve '[' takibi
+    last_valid = 0
+
+    while i < len(text):
+        ch = text[i]
+        if escape:
+            escape = False
+        elif ch == "\\" and in_string:
+            escape = True
+        elif ch == '"':
+            in_string = not in_string
+        elif not in_string:
+            if ch == "{" or ch == "[":
+                stack.append(ch)
+            elif ch == "}" or ch == "]":
+                if stack:
+                    stack.pop()
+            if not in_string and ch in ",}]" and not stack[:1] == [None]:
+                last_valid = i + 1
+        i += 1
+
+    # Açık string'i kapat
+    if in_string:
+        text = text[:last_valid] if last_valid else text + '"'
+        stack_copy = stack[:]
+    else:
+        stack_copy = stack[:]
+
+    # Trailing comma temizle (son anlamlı karakter virgülse)
+    stripped = text.rstrip()
+    while stripped.endswith(","):
+        stripped = stripped[:-1].rstrip()
+    text = stripped
+
+    # Eksik kapanışları tamamla (ters sırayla)
+    closers = {"{": "}", "[": "]"}
+    for opener in reversed(stack_copy):
+        text += closers[opener]
+
+    return text
 
 
 # ─────────────────────────────────────────────────────────────────
