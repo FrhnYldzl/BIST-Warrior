@@ -1,0 +1,17 @@
+fastapi==0.135.3
+uvicorn[standard]==0.44.0
+python-dotenv==1.2.2
+pydantic==2.12.5
+requests==2.33.1
+aiofiles==25.1.0
+websockets==14.1
+anthropic==0.94.0
+APScheduler==3.11.2
+google-genai==1.16.1
+pytz==2025.2
+
+# ─── Meridian TR (BIST) ekstra bağımlılıklar ────────────────────
+yfinance>=1.2.2
+ib_insync==0.9.86
+pandas==2.2.3
+numpy==2.2.1
