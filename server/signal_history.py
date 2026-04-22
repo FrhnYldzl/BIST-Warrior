@@ -80,14 +80,15 @@ def init_db() -> None:
 # ──────────────────────────────────────────────────────────────────
 
 def _parse_entry_zone(zone: str | None) -> tuple[Optional[float], Optional[float]]:
-    """'210.50-212.00' → (210.50, 212.00). Tek değer / format hatası tolere eder."""
+    """'210.50-212.00' → (210.50, 212.00). '₺42,50 - ₺43,00' → (42.5, 43.0).
+    Fiyatlar pozitif olduğu için negatif işareti aranmaz — "-" zaten range ayracı."""
     if not zone:
         return (None, None)
     if isinstance(zone, (int, float)):
         v = float(zone)
         return (v, v)
     s = str(zone).replace(",", ".").replace("₺", "").strip()
-    nums = re.findall(r"-?\d+(?:\.\d+)?", s)
+    nums = re.findall(r"\d+(?:\.\d+)?", s)
     if not nums:
         return (None, None)
     if len(nums) == 1:
@@ -98,12 +99,13 @@ def _parse_entry_zone(zone: str | None) -> tuple[Optional[float], Optional[float
 
 
 def _to_float(v) -> Optional[float]:
+    """Fiyat alanları için pozitif float parser (% değişim gibi negatif sayılar için kullanılmaz)."""
     if v is None or v == "":
         return None
     try:
         if isinstance(v, str):
             v = v.replace(",", ".").replace("₺", "").strip()
-            nums = re.findall(r"-?\d+(?:\.\d+)?", v)
+            nums = re.findall(r"\d+(?:\.\d+)?", v)
             if not nums:
                 return None
             return float(nums[0])
