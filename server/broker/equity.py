@@ -30,12 +30,12 @@ from typing import Optional
 import yfinance as yf
 from dotenv import load_dotenv
 
-from config import ORDER_COOLDOWN_SEC, BRACKET_ENABLED
+from config import ORDER_COOLDOWN_SEC, BRACKET_ENABLED, DATA_DIR
 
 load_dotenv()
 
-# Simulasyon veritabani yolu
-_DB_PATH = Path(__file__).parent.parent / "paper_bist.db"
+# Simulasyon veritabani yolu (Railway Volume varsa /data, yoksa server/)
+_DB_PATH = Path(DATA_DIR) / "paper_bist.db"
 
 # Baslangic sermayesi (TRY)
 STARTING_CAPITAL_TRY = float(os.getenv("STARTING_CAPITAL_TRY", "1000000"))

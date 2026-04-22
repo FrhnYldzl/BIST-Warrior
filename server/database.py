@@ -9,7 +9,11 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "trades.db")
+try:
+    from config import DATA_DIR as _DATA_DIR
+except Exception:
+    _DATA_DIR = os.path.dirname(__file__)
+DB_PATH = os.path.join(_DATA_DIR, "trades.db")
 
 
 def init_db():

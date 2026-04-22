@@ -1277,6 +1277,7 @@ tr.trade-self td:first-child {
       <div class="nav-section-label">🔬 ANALİZ</div>
       <div class="nav-item" data-view="regime"><span class="key">R</span>Piyasa Rejimi</div>
       <div class="nav-item" data-view="council"><span class="key">K</span>AI Council</div>
+      <div class="nav-item" data-view="history"><span class="key">G</span>Sinyal Tarihçesi</div>
       <div class="nav-item" data-view="library"><span class="key">S</span>Sinyal Kütüphanesi</div>
     </div>
 
@@ -1579,6 +1580,71 @@ tr.trade-self td:first-child {
     </section>
 
     <!-- ═══ AI Council (eski audit + Claude+Gemini diyaloğu) ═══ -->
+    <!-- ═══ SİNYAL TARİHÇESİ — Retrospektif izleme ═══ -->
+    <section class="view" id="view-history">
+      <div class="section-title">SİNYAL TARİHÇESİ</div>
+
+      <!-- Performans özeti -->
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-header">
+          <div>📊 Son 30 gün istatistik</div>
+          <select class="input" id="hist-period" onchange="loadHistory()" style="max-width:140px">
+            <option value="1">Bugün</option>
+            <option value="7">Son 7 gün</option>
+            <option value="30" selected>Son 30 gün</option>
+            <option value="90">Son 90 gün</option>
+          </select>
+        </div>
+        <div class="stats-grid" id="hist-perf-grid" style="padding:14px">
+          <div class="stat"><div class="stat-label">Toplam Sinyal</div><div class="stat-value" id="hist-total">--</div></div>
+          <div class="stat"><div class="stat-label">Giriş Oranı</div><div class="stat-value" id="hist-entry-rate">--%</div><div class="stat-sub" id="hist-entry-sub">entry zone'a girilen</div></div>
+          <div class="stat"><div class="stat-label">İsabet Oranı</div><div class="stat-value" id="hist-hit-rate">--%</div><div class="stat-sub">TP / (TP + SL)</div></div>
+          <div class="stat"><div class="stat-label">Ort. Kazanan</div><div class="stat-value" id="hist-avg-winner" style="color:var(--success)">--%</div></div>
+          <div class="stat"><div class="stat-label">Ort. Kaybeden</div><div class="stat-value" id="hist-avg-loser" style="color:var(--danger)">--%</div></div>
+          <div class="stat"><div class="stat-label">TP / SL / Exp</div><div class="stat-value" id="hist-breakdown" style="font-size:18px">-- / -- / --</div></div>
+        </div>
+      </div>
+
+      <!-- Filtreler + tablo -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="row gap-sm">
+            <input type="text" class="input" id="hist-filter-ticker" placeholder="Hisse ara (GARAN.IS)…" oninput="filterHistory()" style="max-width:180px">
+            <select class="input" id="hist-filter-status" onchange="filterHistory()" style="max-width:160px">
+              <option value="">Tüm durumlar</option>
+              <option value="pending">⏳ Bekleyen</option>
+              <option value="entered">✅ Girildi</option>
+              <option value="target_hit">🎯 TP</option>
+              <option value="stopped">🛑 SL</option>
+              <option value="expired">⏰ Süre doldu</option>
+              <option value="cancelled">🔄 Güncellendi</option>
+            </select>
+            <input type="date" class="input" id="hist-filter-date" onchange="filterHistory()" style="max-width:160px">
+          </div>
+          <div class="panel-sub" id="hist-count">--</div>
+        </div>
+        <div class="table-wrap">
+          <table id="history-table">
+            <thead><tr>
+              <th>SAAT</th>
+              <th>HİSSE</th>
+              <th>AKSİYON</th>
+              <th class="num">GÜVEN</th>
+              <th>GİRİŞ ZONE</th>
+              <th class="num">SL</th>
+              <th class="num">TP</th>
+              <th class="num">R/R</th>
+              <th>STRATEJİ</th>
+              <th>DURUM</th>
+              <th class="num">SONUÇ</th>
+              <th>GEREKÇE</th>
+            </tr></thead>
+            <tbody><tr><td colspan="12" class="empty">Yükleniyor…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="view" id="view-council">
       <div class="section-title">🧠 AI COUNCIL · CLAUDE + GEMINI TEYİT</div>
       <div class="reasoning" style="margin-bottom:14px">
@@ -2286,6 +2352,152 @@ function toggleSidebar(force) {
   else if (force === true) app.classList.add('sidebar-open');
   else app.classList.toggle('sidebar-open');
 }
+
+// ═══════════════ SİNYAL TARİHÇESİ ═══════════════
+let _historyAllSignals = [];
+
+async function loadHistory() {
+  const period = document.getElementById('hist-period')?.value || '30';
+  try {
+    const [perfR, sigsR] = await Promise.all([
+      fetch('/api/signals/performance?days=' + period),
+      fetch('/api/signals/history?limit=500'),
+    ]);
+    const perf = await perfR.json();
+    const data = await sigsR.json();
+    _historyAllSignals = data.signals || [];
+    renderHistoryPerf(perf);
+    filterHistory();
+  } catch (e) {
+    console.error('loadHistory err', e);
+  }
+}
+
+function renderHistoryPerf(p) {
+  document.getElementById('hist-total').textContent = p.total_signals ?? 0;
+  document.getElementById('hist-entry-rate').textContent = (p.entry_rate_pct ?? 0) + '%';
+  document.getElementById('hist-hit-rate').textContent = (p.hit_rate_pct ?? 0) + '%';
+  document.getElementById('hist-avg-winner').textContent = (p.avg_winner_pct >= 0 ? '+' : '') + (p.avg_winner_pct ?? 0) + '%';
+  document.getElementById('hist-avg-loser').textContent = (p.avg_loser_pct ?? 0) + '%';
+  document.getElementById('hist-breakdown').textContent =
+    (p.target_hits ?? 0) + ' / ' + (p.stop_hits ?? 0) + ' / ' + ((p.by_status?.expired?.count) ?? 0);
+}
+
+function filterHistory() {
+  const ticker = (document.getElementById('hist-filter-ticker')?.value || '').toUpperCase();
+  const status = document.getElementById('hist-filter-status')?.value || '';
+  const date = document.getElementById('hist-filter-date')?.value || '';
+  const rows = _historyAllSignals.filter(s => {
+    if (ticker && !(s.ticker || '').toUpperCase().includes(ticker)) return false;
+    if (status && s.hit_status !== status) return false;
+    if (date && s.date_tr !== date) return false;
+    return true;
+  });
+  document.getElementById('hist-count').textContent = rows.length + ' sinyal';
+  renderHistoryRows(rows);
+}
+
+const STATUS_STYLE = {
+  'pending':    { label: '⏳ Bekliyor',    cls: 'pill-muted' },
+  'entered':    { label: '✅ Girildi',     cls: 'pill-blue' },
+  'target_hit': { label: '🎯 TP',          cls: 'pill-green' },
+  'stopped':    { label: '🛑 SL',          cls: 'pill-red' },
+  'expired':    { label: '⏰ Süre doldu',  cls: 'pill-amber' },
+  'cancelled':  { label: '🔄 Yenilendi',   cls: 'pill-muted' },
+};
+
+function renderHistoryRows(rows) {
+  const tbody = document.querySelector('#history-table tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="12" class="empty">Filtreye uygun sinyal yok</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(s => {
+    const time = s.scan_time ? new Date(s.scan_time).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'}) : '--';
+    const style = STATUS_STYLE[s.hit_status] || { label: s.hit_status, cls: 'pill-muted' };
+    const entryZone = (s.entry_low != null && s.entry_high != null)
+      ? (s.entry_low === s.entry_high ? `₺${s.entry_low.toFixed(2)}` : `₺${s.entry_low.toFixed(2)}–${s.entry_high.toFixed(2)}`)
+      : '--';
+    const sl = s.stop_loss != null ? `₺${Number(s.stop_loss).toFixed(2)}` : '--';
+    const tp = s.take_profit != null ? `₺${Number(s.take_profit).toFixed(2)}` : '--';
+    const rr = s.risk_reward || '--';
+    const outcomeTxt = s.outcome_pct != null
+      ? `<span style="color:${s.outcome_pct >= 0 ? 'var(--success)' : 'var(--danger)'}">${s.outcome_pct > 0 ? '+' : ''}${Number(s.outcome_pct).toFixed(2)}%</span>`
+      : '—';
+    const actionCls = s.action === 'long' ? 'pill-green' : s.action === 'short' ? 'pill-red' : 'pill-muted';
+    const confColor = s.confidence >= 8 ? 'var(--success)' : s.confidence >= 6 ? 'var(--amber)' : 'var(--muted)';
+    const reasoning = (s.reasoning || '').slice(0, 120) + ((s.reasoning || '').length > 120 ? '…' : '');
+    return `<tr>
+      <td>${time}</td>
+      <td><strong>${s.ticker}</strong></td>
+      <td><span class="pill ${actionCls}">${s.action}</span></td>
+      <td class="num" style="color:${confColor};font-weight:700">${s.confidence ?? '--'}</td>
+      <td>${entryZone}</td>
+      <td class="num">${sl}</td>
+      <td class="num">${tp}</td>
+      <td class="num">${rr}</td>
+      <td>${s.strategy || '--'}</td>
+      <td><span class="pill ${style.cls}">${style.label}</span></td>
+      <td class="num">${outcomeTxt}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:360px;white-space:normal">${reasoning}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════ WEBSOCKET — Timing Agent push ═══════════════
+function _initSignalPush() {
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/ws`);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'signal_update') handleSignalPush(msg);
+      } catch {}
+    };
+    ws.onclose = () => setTimeout(_initSignalPush, 5000);  // reconnect
+  } catch (e) { console.warn('WS bağlantısı başarısız', e); }
+}
+
+function handleSignalPush(msg) {
+  // Entry zone'a girildi
+  (msg.newly_entered || []).forEach(e => {
+    toast(`🎯 GİRİŞ FIRSATI — ${e.ticker} @ ₺${Number(e.price).toFixed(2)} (güven ${e.confidence}/10)`, 6000);
+    _notifyDesktop('🎯 ' + e.ticker + ' giriş zone\'unda', `₺${Number(e.price).toFixed(2)} — güven ${e.confidence}/10`);
+  });
+  // TP tetikledi
+  (msg.tp_hits || []).forEach(e => {
+    toast(`✅ TP GERÇEKLEŞTİ — ${e.ticker} +${Number(e.pct).toFixed(2)}%`, 5000);
+    _notifyDesktop('✅ ' + e.ticker + ' hedefe ulaştı', `+${Number(e.pct).toFixed(2)}%`);
+  });
+  // SL tetikledi
+  (msg.sl_hits || []).forEach(e => {
+    toast(`🛑 SL — ${e.ticker} ${Number(e.pct).toFixed(2)}%`, 5000);
+    _notifyDesktop('🛑 ' + e.ticker + ' stop-loss', `${Number(e.pct).toFixed(2)}%`);
+  });
+  // Eğer history sayfasındaysa tabloyu yenile
+  const historyView = document.getElementById('view-history');
+  if (historyView && historyView.classList.contains('active')) {
+    loadHistory();
+  }
+}
+
+function _notifyDesktop(title, body) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    try { new Notification(title, { body, icon: '/favicon.ico' }); } catch {}
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  _initSignalPush();
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+});
+
 document.addEventListener('click', (e) => {
   const item = e.target.closest('.nav-item');
   if (item && window.matchMedia('(max-width: 920px)').matches) {
@@ -3243,6 +3455,7 @@ function onViewChange(view) {
     // 🔬 ANALİZ
     case 'regime':   loadRegime(); break;
     case 'council':  loadAudit(); break;
+    case 'history':  loadHistory(); break;
     case 'library':  loadLibrary(); break;
     // ⚙️ SİSTEM
     case 'universe': loadUniverse(); break;

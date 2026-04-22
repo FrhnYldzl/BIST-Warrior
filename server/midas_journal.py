@@ -23,7 +23,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
-_DB_PATH = Path(__file__).parent / "midas_journal.db"
+try:
+    from config import DATA_DIR as _DATA_DIR
+except Exception:
+    _DATA_DIR = str(Path(__file__).parent)
+_DB_PATH = Path(_DATA_DIR) / "midas_journal.db"
 
 
 # ─── Midas Emir Tipleri (UI için) ─────────────────────────────────

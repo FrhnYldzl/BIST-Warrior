@@ -24,7 +24,11 @@ load_dotenv(_env_path)
 _env_vals = dotenv_values(_env_path)
 def _get(key): return os.getenv(key) or _env_vals.get(key, "")
 
-DB_PATH = Path(__file__).parent / "trades.db"
+try:
+    from config import DATA_DIR as _DATA_DIR
+except Exception:
+    _DATA_DIR = str(Path(__file__).parent)
+DB_PATH = Path(_DATA_DIR) / "trades.db"
 
 
 def init_journal_db():

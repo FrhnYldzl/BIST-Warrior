@@ -30,9 +30,10 @@ from notifier import send_trade_notification, send_morning_brief, send_high_conf
 from config import (
     OPERATION_MODE, HIGH_CONFIDENCE_ALERT,
     MORNING_BRIEF_HOUR, MORNING_BRIEF_MINUTE,
+    DATA_DIR,
 )
 
-DB_PATH = Path(__file__).parent / "trades.db"
+DB_PATH = Path(DATA_DIR) / "trades.db"
 MARKET_TZ = "Europe/Istanbul"
 
 # Son tarama sonucu (dashboard için)
@@ -145,6 +146,13 @@ def run_scan(broker=None, auto_execute: bool = False):
 
     # 5. DB'ye logla
     _log_scan(result)
+
+    # 5b. Sinyal tarihçesine de logla (kalıcı: isabet takibi için)
+    try:
+        import signal_history as _sighist
+        _sighist.log_scan(result, market_data=market_data)
+    except Exception as e:
+        print(f"[SignalHistory] log hatası: {e}")
 
     # 6. Gemini Audit (Council — iki AI onaylarsa işlem yapılır)
     audit_results = []
@@ -259,6 +267,11 @@ def start(broker=None, auto_execute: bool = False, interval_minutes: int = 10):
         return
 
     init_journal_db()
+    try:
+        import signal_history as _sighist
+        _sighist.init_db()
+    except Exception as e:
+        print(f"[SignalHistory] init hatası: {e}")
 
     # Pre-market cleanup: bekleyen stale emirleri iptal et
     if broker:
@@ -311,6 +324,22 @@ def start(broker=None, auto_execute: bool = False, interval_minutes: int = 10):
         replace_existing=True,
     )
 
+    # ⏱ Signal Hit Tracker — her 90s bekleyen sinyallerin entry/TP/SL durumunu güncelle
+    scheduler.add_job(
+        func=_update_signal_hits,
+        trigger=IntervalTrigger(seconds=90),
+        id="signal_hit_tracker",
+        replace_existing=True,
+    )
+
+    # 🌆 Signal EOD Finalizer — Pzt-Cum 18:05 TRT (seans kapanışından 5 dk sonra)
+    scheduler.add_job(
+        func=_finalize_signals_eod,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=18, minute=5, timezone=MARKET_TZ),
+        id="signal_eod_finalizer",
+        replace_existing=True,
+    )
+
     # Pre-open cleanup: Pzt-Cum 09:30 TRT (açılıştan 30 dk önce)
     scheduler.add_job(
         func=lambda: _pre_open_cleanup(broker),
@@ -343,6 +372,89 @@ def stop():
     if scheduler.running:
         scheduler.shutdown(wait=False)
         print("[Scheduler] Durduruldu.")
+
+
+# ──────────────────────────────────────────────────────────────────
+# Signal hit tracker — entry/TP/SL gerçekleşti mi?
+# ──────────────────────────────────────────────────────────────────
+
+def _update_signal_hits():
+    """Her 90s çalışır: bekleyen/girilmiş sinyalleri canlı fiyatla karşılaştır."""
+    try:
+        import signal_history as _sighist
+        from market_scanner import is_market_open
+        if not is_market_open():
+            return
+
+        # Bugünün aktif sinyallerini topla, onlara ait tickers'ı al
+        active = _sighist.get_active_signals()
+        if not active:
+            return
+
+        tickers = list({s["ticker"] for s in active})
+        if not tickers:
+            return
+
+        # yfinance ile canlı fiyatlar
+        import yfinance as yf
+        import pandas as pd
+        live_prices: dict = {}
+
+        try:
+            df = yf.download(
+                tickers=" ".join(tickers),
+                period="1d", interval="5m",
+                group_by="ticker", threads=True,
+                progress=False, auto_adjust=True,
+            )
+            if isinstance(df.columns, pd.MultiIndex):
+                for t in tickers:
+                    if t in df.columns.get_level_values(0):
+                        sub = df[t].dropna(how="all")
+                        if len(sub):
+                            live_prices[t] = float(sub["Close"].iloc[-1])
+            else:
+                # Tek ticker
+                sub = df.dropna(how="all")
+                if len(sub) and tickers:
+                    live_prices[tickers[0]] = float(sub["Close"].iloc[-1])
+        except Exception as e:
+            print(f"[SignalHits] yfinance hatası: {e}")
+            return
+
+        # Durumu güncelle + değişikliklere göre bildirim tetikle
+        result = _sighist.update_hit_status(live_prices)
+
+        # Dashboard'a WebSocket push (varsa)
+        if result.get("newly_entered") or result.get("tp_hits") or result.get("sl_hits"):
+            try:
+                from main import manager as _ws_manager  # lazy import to avoid cycle
+                import asyncio
+                payload = {
+                    "type": "signal_update",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    **result,
+                }
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(_ws_manager.broadcast(payload))
+            except Exception:
+                pass
+
+        if result["updated"]:
+            print(f"[SignalHits] {result['updated']} güncellendi | entered={len(result['newly_entered'])} TP={len(result['tp_hits'])} SL={len(result['sl_hits'])}")
+    except Exception as e:
+        print(f"[SignalHits] beklenmeyen hata: {e}")
+
+
+def _finalize_signals_eod():
+    """18:05 TRT: kapanmamış sinyalleri 'expired' olarak işaretle."""
+    try:
+        import signal_history as _sighist
+        n = _sighist.mark_expired_at_eod()
+        print(f"[SignalEOD] {n} sinyal 'expired' olarak işaretlendi")
+    except Exception as e:
+        print(f"[SignalEOD] hata: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────

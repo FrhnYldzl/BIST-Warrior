@@ -18,7 +18,11 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "trades.db"
+try:
+    from config import DATA_DIR as _DATA_DIR
+except Exception:
+    _DATA_DIR = str(Path(__file__).parent)
+DB_PATH = Path(_DATA_DIR) / "trades.db"
 
 
 def init_journal_v2():

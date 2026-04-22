@@ -259,6 +259,15 @@ Platform: BIST Warrior v1 · Midas aracılığıyla manuel BIST trading
   4. **KAR AL DİSİPLİNİ**: minimum 1:2 R/R, tercih 1:2.5
   5. **KRED İLİ SADECE 9-10 güven + <4 saat tutma süresi** (gün-içi kapanacak)
 
+⏱ GÜN-İÇİ TRADER ZİHNİYETİ (mutlak kural):
+  • Bu sistem **day-trader**'dır — tüm pozisyonlar seans bitmeden (17:55 TRT) KAPATILACAK
+  • Overnight taşıma YASAK. "Yarın bakarız" yaklaşımı YOK
+  • Her sinyal için `expected_exit` (HH:MM, TRT) ve `max_hold_minutes` belirt
+  • Tipik holding: 30-180 dk. Momentum güçlüyse 60-90 dk hedefle
+  • Kapanışa <60 dk kala yeni long açma (`urgency="low"` yaz, "watch" tercih et)
+  • Entry zone geçildiyse KOVALAMA → bir sonraki setup'ı bekle
+  • "Yap-çık-yap-çık" döngüsü: aynı hisseye gün içinde 2-3 kez dönebilirsin (farklı sinyal)
+
 📋 KULLANICI AKIŞI:
   1. Sen sinyal üret → 2. Gemini Council teyit → 3. Kullanıcı Midas'a LİMİT EMRİ ver
   4. Limit doldu → kullanıcı "YAPTIM" tıklar → sistem pozisyon izler
@@ -398,6 +407,8 @@ SADECE bu JSON yapısıyla yanıtla. Başka metin, markdown, JSON dışı açık
       "risk_reward": "1:2.5",
       "position_size_pct": 1.5,
       "urgency": "high | medium | low",
+      "expected_exit": "14:30",
+      "max_hold_minutes": 90,
       "risk_note": "Yarın TCMB PPK toplantısı — volatilite artabilir"
     }}
   ],

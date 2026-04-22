@@ -299,6 +299,36 @@ async def get_recommendations():
     return sched.get_last_scan()
 
 
+# ─── Sinyal Tarihçesi & İsabet Takibi ────────────────────────────
+@app.get("/api/signals/history")
+async def signals_history(ticker: str | None = None, date: str | None = None,
+                          status: str | None = None, limit: int = 200):
+    """Sinyal geçmişi — filtreli liste (ticker/date/status)."""
+    import signal_history as _sh
+    return {"signals": _sh.get_signals(ticker=ticker, date=date, status=status, limit=limit)}
+
+
+@app.get("/api/signals/timeline")
+async def signals_timeline(date: str | None = None):
+    """Belirtilen günün (default: bugün TR) tüm sinyalleri — zaman sırasıyla."""
+    import signal_history as _sh
+    return {"date": date or "today_tr", "signals": _sh.get_timeline(date=date)}
+
+
+@app.get("/api/signals/performance")
+async def signals_performance(days: int = 30):
+    """Sinyal isabet istatistikleri: entry oranı, hit rate, avg winner/loser."""
+    import signal_history as _sh
+    return _sh.get_performance(days=days)
+
+
+@app.get("/api/signals/active")
+async def signals_active():
+    """Bugünün aktif (pending/entered) sinyalleri — Timing Agent için."""
+    import signal_history as _sh
+    return {"signals": _sh.get_active_signals()}
+
+
 @app.post("/api/scan-now")
 async def trigger_scan():
     """Manuel tarama baslat (dashboard'dan tetiklenebilir)."""
