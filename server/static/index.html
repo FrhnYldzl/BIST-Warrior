@@ -1646,24 +1646,29 @@ tr.trade-self td:first-child {
     </section>
 
     <section class="view" id="view-council">
-      <div class="section-title">🧠 AI COUNCIL · CLAUDE + GEMINI TEYİT</div>
+      <div class="section-title">🧠 AI COUNCIL · CLAUDE + GEMINI + RISK AGENT</div>
       <div class="reasoning" style="margin-bottom:14px">
-        <strong>Council modu:</strong> Claude bir sinyal önerdiğinde, Gemini ikinci AI olarak inceler.
-        Her ikisi de onaylamışsa güven katmanlı olur — tek AI'ya körü körüne bağlanma.
+        <strong>3 katmanlı görüş:</strong> <code>Claude</code> sinyal üretir → <code>Gemini</code> bağımsız ikinci görüş → <code>Risk Agent</code> portföye etkisini hesaplar.
+        Final verdict en kötü görüşe göre verilir — tüm üçü yeşilse <strong style="color:var(--success)">GREEN_LIGHT</strong>, herhangi biri kırmızıysa <strong style="color:var(--tr-red)">RED</strong>.
         <br><br>
-        <strong>Filtre:</strong> Sadece <code>action=long + confidence≥7</code> sinyalleri Gemini'ye gider (API maliyet optimizasyonu).
+        <strong>Filtre:</strong> Sadece <code>action=long + confidence≥7</code> Gemini'ye gider (API maliyet). Risk Agent her sinyali değerlendirir.
       </div>
+
+      <!-- Özet stat-grid: Council toplamı + Portföy Risk Agent durumu -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px" id="council-summary">
+        <div class="stat-card" style="border-left-color:var(--success)"><div class="stat-label">🟢 GREEN</div><div class="stat-value" id="council-green">--</div><div class="stat-sub">Yeşil ışık</div></div>
+        <div class="stat-card" style="border-left-color:var(--warning)"><div class="stat-label">🟡 YELLOW</div><div class="stat-value" id="council-yellow">--</div><div class="stat-sub">Dikkatli</div></div>
+        <div class="stat-card" style="border-left-color:var(--tr-red)"><div class="stat-label">🔴 RED</div><div class="stat-value" id="council-red">--</div><div class="stat-sub">Kırmızı ışık</div></div>
+        <div class="stat-card" style="border-left-color:var(--blue)"><div class="stat-label">PORTFÖY RİSK</div><div class="stat-value" id="council-port-verdict">--</div><div class="stat-sub" id="council-port-sub">--</div></div>
+      </div>
+
+      <!-- Council kartları -->
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">Son Audit Sonuçları</div>
+          <div class="panel-title">Aktif Sinyaller — Üçlü Konsey</div>
           <div class="panel-sub" id="council-status">--</div>
         </div>
-        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
-          <div class="stat-card" style="border-left-color:var(--success)"><div class="stat-label">Onaylanan</div><div class="stat-value" id="council-approved">--</div></div>
-          <div class="stat-card" style="border-left-color:var(--warning)"><div class="stat-label">Modifiye</div><div class="stat-value" id="council-modified">--</div></div>
-          <div class="stat-card" style="border-left-color:var(--tr-red)"><div class="stat-label">Reddedilen</div><div class="stat-value" id="council-rejected">--</div></div>
-        </div>
-        <div id="council-list"><div class="empty">Audit sonucu yok</div></div>
+        <div id="council-list"><div class="empty">Tarama bekleniyor…</div></div>
       </div>
     </section>
 
@@ -3394,13 +3399,16 @@ async function loadRiskMetrics() {
 async function loadAudit() {
   const d = await api('/api/audit');
   if (!d) return;
-  $('#audit-status').textContent = d.last_audit ? new Date(d.last_audit).toLocaleString('tr-TR') : 'Henüz audit yapılmadı';
+  const auditStatus = document.getElementById('audit-status');
+  if (auditStatus) auditStatus.textContent = d.last_audit ? new Date(d.last_audit).toLocaleString('tr-TR') : 'Henüz audit yapılmadı';
   const results = d.results || [];
+  const auditList = document.getElementById('audit-list');
+  if (!auditList) return;
   if (results.length === 0) {
-    $('#audit-list').innerHTML = '<div class="empty">Audit sonucu yok</div>';
+    auditList.innerHTML = '<div class="empty">Audit sonucu yok</div>';
     return;
   }
-  $('#audit-list').innerHTML = results.map(r => {
+  auditList.innerHTML = results.map(r => {
     const v = r.audit_verdict || 'APPROVE';
     const cls = v === 'APPROVE' ? 'badge-long' : v === 'REJECT' ? 'badge-short' : 'badge-watch';
     return `<div class="panel" style="padding:10px;margin-bottom:8px">
@@ -3408,6 +3416,96 @@ async function loadAudit() {
       <div style="font-size:11px;color:var(--text-2);margin-top:4px">${r.reasoning || ''}</div>
     </div>`;
   }).join('');
+}
+
+// ═══════════════ AI COUNCIL — Claude + Gemini + Risk Agent ═══════════════
+const FINAL_VERDICT_STYLE = {
+  GREEN:  { label: '🟢 GREEN_LIGHT',  color: 'var(--success)', bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.4)' },
+  YELLOW: { label: '🟡 DİKKAT',       color: 'var(--warning)', bg: 'rgba(234,179,8,0.08)',  border: 'rgba(234,179,8,0.4)' },
+  RED:    { label: '🔴 RED — GEÇME',   color: 'var(--danger)',  bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.5)' },
+};
+
+async function loadCouncil() {
+  try {
+    const [council, port] = await Promise.all([
+      fetch('/api/council').then(r => r.json()).catch(() => null),
+      fetch('/api/risk/portfolio').then(r => r.json()).catch(() => null),
+    ]);
+    renderCouncilSummary(council?.summary, port);
+    renderCouncilCards(council?.items || []);
+    document.getElementById('council-status').textContent =
+      (council?.items?.length ?? 0) + ' sinyal · ' + (port?.position_count ?? 0) + ' açık pozisyon';
+  } catch (e) {
+    console.error('loadCouncil err', e);
+  }
+}
+
+function renderCouncilSummary(summary, port) {
+  document.getElementById('council-green').textContent = summary?.green ?? 0;
+  document.getElementById('council-yellow').textContent = summary?.yellow ?? 0;
+  document.getElementById('council-red').textContent = summary?.red ?? 0;
+  if (port) {
+    const v = port.verdict || 'GREEN';
+    const style = FINAL_VERDICT_STYLE[v] || FINAL_VERDICT_STYLE.GREEN;
+    const el = document.getElementById('council-port-verdict');
+    el.textContent = style.label;
+    el.style.color = style.color;
+    document.getElementById('council-port-sub').textContent =
+      `Yatırım %${(port.invested_pct ?? 0).toFixed(1)} · Nakit %${(port.cash_pct ?? 0).toFixed(1)} · ${port.position_count ?? 0} pozisyon`;
+  }
+}
+
+function renderCouncilCards(items) {
+  const list = document.getElementById('council-list');
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">Tarama bekleniyor — sinyal üretildiğinde Council burada</div>';
+    return;
+  }
+  // Final verdict önceliği: GREEN > YELLOW > RED ters sıra (en güvenliler üstte)
+  const order = { GREEN: 0, YELLOW: 1, RED: 2 };
+  items.sort((a, b) => (order[a.final_verdict] ?? 9) - (order[b.final_verdict] ?? 9));
+
+  list.innerHTML = items.map(it => {
+    const fv = FINAL_VERDICT_STYLE[it.final_verdict] || FINAL_VERDICT_STYLE.YELLOW;
+    const r = it.risk || {};
+    const g = it.gemini;
+    const rPill = pillFor(r.verdict);
+    const cPill = `<span class="pill pill-blue">Claude ${it.claude_action} · ${it.claude_confidence}/10</span>`;
+    const gPill = g
+      ? `<span class="pill ${g.verdict === 'APPROVE' ? 'pill-green' : g.verdict === 'REJECT' ? 'pill-red' : 'pill-amber'}">Gemini ${g.verdict}</span>`
+      : `<span class="pill pill-muted">Gemini —</span>`;
+    const exitInfo = (it.expected_exit || it.max_hold_minutes)
+      ? `<span class="pill pill-muted">⏱ ${it.expected_exit || '--'} (${it.max_hold_minutes || '?'}min)</span>`
+      : '';
+    const warnings = (r.warnings || []).length
+      ? `<div style="margin-top:8px;font-size:11px;color:var(--warning)">⚠️ ${(r.warnings || []).join(' · ')}</div>` : '';
+
+    return `<div style="padding:14px;margin-bottom:10px;border:1px solid ${fv.border};background:${fv.bg};border-radius:6px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:18px;font-weight:700">${it.ticker}</div>
+        <div style="font-size:14px;font-weight:700;color:${fv.color};letter-spacing:0.05em">${fv.label}</div>
+      </div>
+      <div class="row gap-sm" style="flex-wrap:wrap;margin-bottom:10px">
+        ${cPill} ${gPill} <span class="pill" style="background:${fv.bg};color:${fv.color};border:1px solid ${fv.border}">Risk ${r.verdict ?? '?'} (${r.risk_score ?? '?'})</span> ${exitInfo}
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px">
+        <div class="stat" style="padding:6px"><div class="stat-label">Önerilen TRY</div><div class="stat-value" style="font-size:15px">₺${(r.recommended_size_try ?? 0).toLocaleString('tr-TR')}</div></div>
+        <div class="stat" style="padding:6px"><div class="stat-label">Adet</div><div class="stat-value" style="font-size:15px">${r.recommended_qty ?? 0}</div></div>
+        <div class="stat" style="padding:6px"><div class="stat-label">R/R</div><div class="stat-value" style="font-size:15px">1:${r.rr_ratio ?? '?'}</div></div>
+        <div class="stat" style="padding:6px"><div class="stat-label">Stop Mesafe</div><div class="stat-value" style="font-size:15px">${r.stop_distance_pct ?? '?'}%</div></div>
+        <div class="stat" style="padding:6px"><div class="stat-label">Risk %</div><div class="stat-value" style="font-size:15px">${(r.risk_pct_of_equity ?? 0).toFixed(2)}%</div></div>
+        <div class="stat" style="padding:6px"><div class="stat-label">Sektör Sonra</div><div class="stat-value" style="font-size:15px">${r.sector ?? '?'} %${(r.sector_after_pct ?? 0).toFixed(1)}</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.5">${(it.claude_reasoning || '').slice(0, 240)}${(it.claude_reasoning || '').length > 240 ? '…' : ''}</div>
+      ${warnings}
+      <div style="margin-top:6px;font-size:11px;color:var(--muted)"><strong>Final:</strong> ${it.final_reasoning || '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function pillFor(verdict) {
+  const m = { GREEN: 'pill-green', YELLOW: 'pill-amber', RED: 'pill-red', APPROVE: 'pill-green', REJECT: 'pill-red', MODIFY: 'pill-amber' };
+  return m[verdict] || 'pill-muted';
 }
 
 async function loadConfig() {
@@ -3454,7 +3552,7 @@ function onViewChange(view) {
     case 'lifetime': loadLifetime(); break;
     // 🔬 ANALİZ
     case 'regime':   loadRegime(); break;
-    case 'council':  loadAudit(); break;
+    case 'council':  loadCouncil(); break;
     case 'history':  loadHistory(); break;
     case 'library':  loadLibrary(); break;
     // ⚙️ SİSTEM

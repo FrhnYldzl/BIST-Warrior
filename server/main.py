@@ -329,6 +329,73 @@ async def signals_active():
     return {"signals": _sh.get_active_signals()}
 
 
+# ─── Risk Agent / AI Council ─────────────────────────────────────
+def _current_portfolio_for_agents() -> dict:
+    """Risk Agent ve Council için mevcut portföy snapshot'ı (Midas + broker)."""
+    try:
+        acc = broker.get_account_status()
+        positions = broker.get_all_positions() or []
+    except Exception:
+        acc, positions = {}, []
+    # Midas pozisyonlarını da ekle (analyst modunda kullanıcı elle açtığı pozisyonlar)
+    try:
+        midas_open = midas.get_positions(status="open") or []
+        for p in midas_open:
+            positions.append({
+                "ticker": p.get("ticker"),
+                "qty": p.get("qty") or p.get("quantity") or 0,
+                "current_price": p.get("current_price") or p.get("entry_price") or 0,
+                "avg_entry": p.get("entry_price") or 0,
+            })
+    except Exception:
+        pass
+    return {
+        "equity": float(acc.get("equity", 0) or 1_000_000),
+        "cash": float(acc.get("cash", 0) or 0),
+        "positions": positions,
+    }
+
+
+@app.post("/api/risk/assess-signal")
+async def risk_assess_signal(signal: dict):
+    """Tek sinyal için Risk Agent değerlendirmesi (manuel test için)."""
+    import risk_agent as _ra
+    last = sched.get_last_scan()
+    portfolio = _current_portfolio_for_agents()
+    return _ra.assess_signal(signal, portfolio, regime=last.get("regime", "neutral"))
+
+
+@app.get("/api/risk/portfolio")
+async def risk_portfolio():
+    """Mevcut portföyün risk fotoğrafı (Risk Agent)."""
+    import risk_agent as _ra
+    last = sched.get_last_scan()
+    portfolio = _current_portfolio_for_agents()
+    return _ra.assess_portfolio(
+        positions=portfolio["positions"],
+        equity=portfolio["equity"],
+        cash=portfolio["cash"],
+        regime=last.get("regime", "neutral"),
+    )
+
+
+@app.get("/api/council")
+async def ai_council():
+    """
+    AI Council: Claude sinyalleri + Gemini denetimi + Risk Agent değerlendirmesi.
+    Her sinyal için final_verdict (GREEN/YELLOW/RED) + tüm detaylar.
+    """
+    import risk_agent as _ra
+    last = sched.get_last_scan() or {}
+    portfolio = _current_portfolio_for_agents()
+    return _ra.council_view(
+        signals=last.get("decisions", []),
+        portfolio=portfolio,
+        regime=last.get("regime", "neutral"),
+        audit_results=last.get("audit_results", []),
+    )
+
+
 @app.post("/api/scan-now")
 async def trigger_scan():
     """Manuel tarama baslat (dashboard'dan tetiklenebilir)."""
