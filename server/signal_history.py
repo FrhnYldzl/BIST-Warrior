@@ -251,12 +251,19 @@ def update_hit_status(live_prices: dict) -> dict:
     Args:
         live_prices: {"GARAN.IS": 42.85, ...} — en güncel fiyatlar
     Returns:
-        {"updated": int, "newly_entered": [ticker...], "tp_hits": [...], "sl_hits": [...]}
+        {
+          "updated": int,
+          "newly_approaching": [...],  # Timing Agent: entry zone'a %1 yaklaştı
+          "newly_entered": [...],      # Entry zone'a girildi
+          "tp_hits": [...],
+          "sl_hits": [...],
+        }
     """
     if not live_prices:
-        return {"updated": 0, "newly_entered": [], "tp_hits": [], "sl_hits": []}
+        return {"updated": 0, "newly_approaching": [], "newly_entered": [], "tp_hits": [], "sl_hits": []}
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    newly_approaching: list[dict] = []
     newly_entered: list[dict] = []
     tp_hits: list[dict] = []
     sl_hits: list[dict] = []
@@ -268,7 +275,7 @@ def update_hit_status(live_prices: dict) -> dict:
             """SELECT id, ticker, action, entry_low, entry_high, stop_loss, take_profit,
                       price_at_scan, confidence, hit_status
                FROM signals
-               WHERE hit_status IN ('pending','entered')
+               WHERE hit_status IN ('pending','approaching','entered')
                  AND action IN ('long','close_long','short')
                  AND date_tr = ?""",
             (datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=3))).strftime("%Y-%m-%d"),),
@@ -294,15 +301,26 @@ def update_hit_status(live_prices: dict) -> dict:
                 sl = r["stop_loss"]
                 tp = r["take_profit"]
 
-                if r["hit_status"] == "pending":
+                if r["hit_status"] in ("pending", "approaching"):
                     # Fiyat entry zone içine girdi mi?
                     if entry_low is not None and entry_high is not None:
                         if price <= entry_high * 1.001:  # küçük tolerans
                             new_status = "entered"
                             hit_price = price
                             newly_entered.append({"ticker": r["ticker"], "price": price, "confidence": r["confidence"]})
+                        elif r["hit_status"] == "pending" and price <= entry_high * 1.012:
+                            # %1.2'ye kadar yaklaşmış — Timing Agent uyarısı
+                            new_status = "approaching"
+                            distance_pct = (price - entry_high) / entry_high * 100
+                            newly_approaching.append({
+                                "ticker": r["ticker"],
+                                "price": price,
+                                "entry_high": entry_high,
+                                "distance_pct": round(distance_pct, 2),
+                                "confidence": r["confidence"],
+                            })
 
-                if new_status == "entered" or r["hit_status"] == "entered":
+                if new_status in ("entered",) or r["hit_status"] == "entered":
                     # Entry sonrası TP/SL kontrolü
                     ref_price = hit_price or r["price_at_scan"] or price
                     if sl is not None and price <= sl:
@@ -328,6 +346,7 @@ def update_hit_status(live_prices: dict) -> dict:
 
     return {
         "updated": updated,
+        "newly_approaching": newly_approaching,
         "newly_entered": newly_entered,
         "tp_hits": tp_hits,
         "sl_hits": sl_hits,

@@ -396,6 +396,48 @@ async def ai_council():
     )
 
 
+# ─── Portfolio Agent ─────────────────────────────────────────────
+@app.get("/api/portfolio/review")
+async def portfolio_review():
+    """Açık pozisyonlar için hold/reduce/close önerileri + korelasyon uyarıları."""
+    import portfolio_agent as _pa
+    portfolio = _current_portfolio_for_agents()
+    last = sched.get_last_scan() or {}
+    market_data = last.get("market_data") or {}
+    reviews = _pa.review_positions(portfolio.get("positions", []), market_data=market_data)
+    warnings = _pa.correlation_warnings(portfolio.get("positions", []))
+    return {
+        "position_count": len(portfolio.get("positions", [])),
+        "reviews": reviews,
+        "correlation_warnings": warnings,
+    }
+
+
+@app.get("/api/portfolio/kelly")
+async def portfolio_kelly(days: int = 30):
+    """Tarihsel sinyal performansından Kelly büyüklüğü önerisi."""
+    import portfolio_agent as _pa
+    import signal_history as _sh
+    portfolio = _current_portfolio_for_agents()
+    stats = _sh.get_performance(days=days)
+    return _pa.kelly_size(stats, equity=portfolio.get("equity", 0))
+
+
+@app.get("/api/portfolio/day-quality")
+async def portfolio_day_quality():
+    """Bugünün gün kalite skoru — Midas günlük performansından."""
+    import portfolio_agent as _pa
+    daily: dict = {}
+    for fn in ("get_daily_summary", "get_daily", "daily_summary"):
+        if hasattr(midas, fn):
+            try:
+                daily = getattr(midas, fn)() or {}
+                break
+            except Exception:
+                pass
+    return _pa.day_quality(daily)
+
+
 @app.post("/api/scan-now")
 async def trigger_scan():
     """Manuel tarama baslat (dashboard'dan tetiklenebilir)."""

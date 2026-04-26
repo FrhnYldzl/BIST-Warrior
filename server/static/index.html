@@ -1613,6 +1613,7 @@ tr.trade-self td:first-child {
             <select class="input" id="hist-filter-status" onchange="filterHistory()" style="max-width:160px">
               <option value="">Tüm durumlar</option>
               <option value="pending">⏳ Bekleyen</option>
+              <option value="approaching">👀 Yaklaşıyor</option>
               <option value="entered">✅ Girildi</option>
               <option value="target_hit">🎯 TP</option>
               <option value="stopped">🛑 SL</option>
@@ -2403,12 +2404,13 @@ function filterHistory() {
 }
 
 const STATUS_STYLE = {
-  'pending':    { label: '⏳ Bekliyor',    cls: 'pill-muted' },
-  'entered':    { label: '✅ Girildi',     cls: 'pill-blue' },
-  'target_hit': { label: '🎯 TP',          cls: 'pill-green' },
-  'stopped':    { label: '🛑 SL',          cls: 'pill-red' },
-  'expired':    { label: '⏰ Süre doldu',  cls: 'pill-amber' },
-  'cancelled':  { label: '🔄 Yenilendi',   cls: 'pill-muted' },
+  'pending':     { label: '⏳ Bekliyor',    cls: 'pill-muted' },
+  'approaching': { label: '👀 Yaklaşıyor',  cls: 'pill-amber' },
+  'entered':     { label: '✅ Girildi',     cls: 'pill-blue' },
+  'target_hit':  { label: '🎯 TP',          cls: 'pill-green' },
+  'stopped':     { label: '🛑 SL',          cls: 'pill-red' },
+  'expired':     { label: '⏰ Süre doldu',  cls: 'pill-amber' },
+  'cancelled':   { label: '🔄 Yenilendi',   cls: 'pill-muted' },
 };
 
 function renderHistoryRows(rows) {
@@ -2465,6 +2467,11 @@ function _initSignalPush() {
 }
 
 function handleSignalPush(msg) {
+  // Yaklaşıyor — fiyat entry zone'a %1.2 yakın (Timing Agent uyarısı)
+  (msg.newly_approaching || []).forEach(e => {
+    toast(`👀 YAKLAŞIYOR — ${e.ticker} @ ₺${Number(e.price).toFixed(2)} (entry'ye %${Number(e.distance_pct).toFixed(2)})`, 5000);
+    _notifyDesktop('👀 ' + e.ticker + ' yaklaşıyor', `₺${Number(e.price).toFixed(2)} — entry'ye %${Number(e.distance_pct).toFixed(2)}, hazırlan`);
+  });
   // Entry zone'a girildi
   (msg.newly_entered || []).forEach(e => {
     toast(`🎯 GİRİŞ FIRSATI — ${e.ticker} @ ₺${Number(e.price).toFixed(2)} (güven ${e.confidence}/10)`, 6000);
@@ -2484,6 +2491,10 @@ function handleSignalPush(msg) {
   const historyView = document.getElementById('view-history');
   if (historyView && historyView.classList.contains('active')) {
     loadHistory();
+  }
+  const councilView = document.getElementById('view-council');
+  if (councilView && councilView.classList.contains('active')) {
+    loadCouncil();
   }
 }
 

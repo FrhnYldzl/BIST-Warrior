@@ -426,7 +426,8 @@ def _update_signal_hits():
         result = _sighist.update_hit_status(live_prices)
 
         # Dashboard'a WebSocket push (varsa)
-        if result.get("newly_entered") or result.get("tp_hits") or result.get("sl_hits"):
+        if (result.get("newly_approaching") or result.get("newly_entered")
+            or result.get("tp_hits") or result.get("sl_hits")):
             try:
                 from main import manager as _ws_manager  # lazy import to avoid cycle
                 import asyncio
