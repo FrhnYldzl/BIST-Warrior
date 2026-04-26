@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIST Warrior · Giriş</title>
+<style>
+:root {
+  --navy: #0a1929;
+  --tr-red: #e30a17;
+  --surface: #0f1f33;
+  --ink: #e6edf3;
+  --muted: #6e7681;
+  --border: #1d2d44;
+  --success: #22c55e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(135deg, #0a1929 0%, #122842 100%);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.brand {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.brand-title {
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.5px;
+}
+.brand-title .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--tr-red);
+  border-radius: 50%;
+  margin: 0 6px 4px 0;
+  vertical-align: middle;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+input[type="password"] {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--navy);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  outline: none;
+  font-family: inherit;
+}
+input[type="password"]:focus { border-color: var(--tr-red); }
+button {
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px;
+  background: var(--tr-red);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: filter 100ms;
+}
+button:hover { filter: brightness(1.15); }
+button:disabled { opacity: 0.5; cursor: wait; }
+.err {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(227,10,23,0.15);
+  border: 1px solid rgba(227,10,23,0.4);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #ffb3b8;
+  display: none;
+}
+.foot {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+<form class="box" id="form" onsubmit="return doLogin(event)">
+  <div class="brand">
+    <div class="brand-title"><span class="dot"></span>BIST WARRIOR</div>
+    <div class="brand-sub">⚔️ with MIDAS · AI Analist</div>
+  </div>
+  <label for="pw">Parola</label>
+  <input type="password" id="pw" name="pw" autocomplete="current-password" autofocus required>
+  <button type="submit" id="btn">Giriş</button>
+  <div class="err" id="err"></div>
+  <div class="foot">Kullanıma özel — yetkisiz giriş yasak</div>
+</form>
+<script>
+async function doLogin(ev) {
+  ev.preventDefault();
+  const pw = document.getElementById('pw').value;
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  btn.disabled = true;
+  btn.textContent = 'Doğrulanıyor…';
+  err.style.display = 'none';
+  try {
+    const r = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+      credentials: 'same-origin',
+    });
+    if (r.ok) {
+      const next = new URLSearchParams(location.search).get('next') || '/';
+      location.href = next;
+    } else {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = d.detail || 'Parola hatalı';
+      err.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Giriş';
+    }
+  } catch (e) {
+    err.textContent = 'Bağlantı hatası: ' + e.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Giriş';
+  }
+  return false;
+}
+</script>
+</body>
+</html>

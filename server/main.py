@@ -115,6 +115,82 @@ app = FastAPI(
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+
+# ──────────────────────────────────────────────────────────────────
+# Auth Middleware (AUTH_PASSWORD env'i set edilmişse aktif)
+# ──────────────────────────────────────────────────────────────────
+
+import auth as _auth
+from fastapi import Request
+from fastapi.responses import JSONResponse, RedirectResponse
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if not _auth.is_enabled():
+        return await call_next(request)
+
+    path = request.url.path
+    if _auth.is_public(path):
+        return await call_next(request)
+
+    # WebSocket upgrade istekleri kendi auth'unu yapar (lifespan'a bırak)
+    token = request.cookies.get(_auth.COOKIE_NAME)
+    if _auth.verify_token(token):
+        return await call_next(request)
+
+    # API çağrıları → 401 JSON; HTML çağrıları → /login.html'e yönlendir
+    accept = request.headers.get("accept", "")
+    if path.startswith("/api/") or "application/json" in accept:
+        return JSONResponse({"detail": "Yetkilendirme gerekli"}, status_code=401)
+
+    next_url = path
+    if request.url.query:
+        next_url += "?" + request.url.query
+    return RedirectResponse(url=f"/login.html?next={next_url}", status_code=303)
+
+
+@app.get("/login.html", response_class=HTMLResponse, include_in_schema=False)
+async def login_page():
+    """Açık login sayfası — middleware bypass ediliyor."""
+    p = STATIC_DIR / "login.html"
+    return HTMLResponse(content=p.read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-cache"})
+
+
+@app.post("/auth/login")
+async def auth_login(payload: dict):
+    """{password: '...'} → set cookie."""
+    if not _auth.is_enabled():
+        return {"status": "auth_disabled"}
+    pw = (payload or {}).get("password", "")
+    if not _auth.verify_password(pw):
+        return JSONResponse({"detail": "Parola hatalı"}, status_code=401)
+    token = _auth.issue_token()
+    resp = JSONResponse({"status": "ok"})
+    resp.set_cookie(
+        key=_auth.COOKIE_NAME,
+        value=token,
+        max_age=_auth.COOKIE_TTL,
+        httponly=True,
+        samesite="lax",
+        secure=True,  # Railway HTTPS
+        path="/",
+    )
+    return resp
+
+
+@app.post("/auth/logout")
+async def auth_logout():
+    resp = JSONResponse({"status": "ok"})
+    resp.delete_cookie(key=_auth.COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/auth/status")
+async def auth_status():
+    return {"enabled": _auth.is_enabled()}
+
 # ──────────────────────────────────────────────────────────────────
 # Sabitler
 # ──────────────────────────────────────────────────────────────────
@@ -155,6 +231,12 @@ async def dashboard():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Auth aktifse cookie kontrol; yoksa direkt kabul.
+    if _auth.is_enabled():
+        token = websocket.cookies.get(_auth.COOKIE_NAME)
+        if not _auth.verify_token(token):
+            await websocket.close(code=4401)
+            return
     await manager.connect(websocket)
     try:
         while True:
@@ -1168,12 +1250,34 @@ async def midas_delete(trade_id: int):
 @app.get("/api/health")
 async def health():
     last_scan = sched.get_last_scan()
+    # Volume kalıcılığı kontrolü — DATA_DIR /data ise volume mount edilmiş
+    data_persistent = False
+    try:
+        data_persistent = str(cfg.DATA_DIR).startswith("/data")
+    except Exception:
+        pass
+    # Signal DB erişimi
+    sh_ok = False
+    sh_count = 0
+    try:
+        import signal_history as _sh
+        import sqlite3 as _sq
+        with _sq.connect(_sh._DB_PATH) as conn:
+            sh_count = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+            sh_ok = True
+    except Exception:
+        pass
+
     return {
         "status": "ok",
-        "version": "5.4",
+        "version": "6.0",
         "ai_enabled": is_enabled(),
         "gemini_enabled": gemini_enabled(),
         "notify_enabled": notify_enabled(),
+        "auth_enabled": _auth.is_enabled(),
+        "data_persistent": data_persistent,
+        "signal_history_ok": sh_ok,
+        "signal_history_count": sh_count,
         "regime": last_scan.get("regime", "unknown"),
         "session_mode": last_scan.get("session_mode", "unknown"),
         "last_scan": last_scan.get("timestamp"),

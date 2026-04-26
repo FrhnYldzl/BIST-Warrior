@@ -1332,6 +1332,8 @@ tr.trade-self td:first-child {
           <span class="plan-hero-chip" id="plan-strategy">STRATEJİ: --</span>
           <span class="plan-hero-chip" id="plan-mode">ANALİST MODU</span>
           <span class="plan-hero-chip" id="plan-market">BIST --</span>
+          <span class="plan-hero-chip" id="plan-day-quality" style="display:none">📊 GÜN: --</span>
+          <span class="plan-hero-chip" id="plan-port-risk" style="display:none">🛡 RİSK: --</span>
         </div>
       </div>
 
@@ -1409,6 +1411,9 @@ tr.trade-self td:first-child {
 
       <!-- Live exit warnings banner -->
       <div id="exit-warnings-panel" style="display:none;margin-bottom:14px"></div>
+
+      <!-- 🤖 Portfolio Agent korelasyon uyarıları -->
+      <div id="correlation-warnings" style="display:none;margin-bottom:14px"></div>
 
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
         <div class="stat-card"><div class="stat-label">Açık Pozisyon</div><div class="stat-value" id="active-count">0</div><div class="stat-sub">izleniyor</div></div>
@@ -3588,10 +3593,37 @@ async function loadArena() {
   $('#arena-max').textContent = briefing.max_trades || '--';
 }
 
+const PA_REC_STYLE = {
+  'hold':   { label: '🟢 HOLD',   bg: 'rgba(34,197,94,0.10)',  color: 'var(--success)' },
+  'reduce': { label: '🟡 REDUCE', bg: 'rgba(234,179,8,0.10)',  color: 'var(--warning)' },
+  'close':  { label: '🔴 CLOSE',  bg: 'rgba(239,68,68,0.12)',  color: 'var(--danger)' },
+};
+
 async function loadActivePositions() {
   const open = await api('/api/midas/positions?status=open') || [];
   const pending = await api('/api/midas/positions?status=pending') || [];
   const livePrices = await api('/api/live-prices') || {};
+  // Portfolio Agent review (her pozisyon için hold/reduce/close + gerekçe)
+  const review = await api('/api/portfolio/review') || { reviews: [], correlation_warnings: [] };
+  const reviewByTicker = {};
+  (review.reviews || []).forEach(r => { reviewByTicker[r.ticker] = r; });
+
+  // Korelasyon uyarıları
+  const corrPanel = document.getElementById('correlation-warnings');
+  if (corrPanel) {
+    const warns = review.correlation_warnings || [];
+    if (warns.length) {
+      corrPanel.style.display = 'block';
+      corrPanel.innerHTML = warns.map(w => {
+        const sev = w.severity === 'high' ? 'var(--tr-red)' : 'var(--warning)';
+        return `<div style="padding:10px 14px;background:rgba(234,179,8,0.08);border-left:3px solid ${sev};border-radius:4px;margin-bottom:6px;font-size:12px">
+          <strong>📊 ${w.message}</strong> — <code>${(w.tickers || []).join(', ')}</code>
+        </div>`;
+      }).join('');
+    } else {
+      corrPanel.style.display = 'none';
+    }
+  }
 
   let totalCost = 0, totalValue = 0, totalPnl = 0;
   open.forEach(p => {
@@ -3671,7 +3703,19 @@ async function loadActivePositions() {
       else if (sl > 0 && livePrice <= sl * 1.02) status = '<span class="badge badge-watch">SL YAKIN</span>';
       else status = '<span class="badge badge-long">AÇIK</span>';
 
-      return `<tr class="${sourceRowClass(p)}">
+      // Portfolio Agent verdict
+      const pa = reviewByTicker[p.ticker];
+      let paBadge = '';
+      let paTooltip = '';
+      let rowBg = '';
+      if (pa) {
+        const style = PA_REC_STYLE[pa.recommendation] || PA_REC_STYLE.hold;
+        paTooltip = (pa.reasons || []).join(' · ').replace(/"/g, '&quot;');
+        paBadge = `<div title="${paTooltip}" style="display:inline-block;margin-top:4px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:${style.bg};color:${style.color};border-radius:3px">${style.label}</div>`;
+        if (pa.urgency === 'critical' || pa.urgency === 'high') rowBg = 'background:rgba(239,68,68,0.04)';
+      }
+
+      return `<tr class="${sourceRowClass(p)}" style="${rowBg}">
         <td class="ticker">${t}${sourceBadge(p)}</td>
         <td class="num">${fmtInt(p.qty)}</td>
         <td class="num">${fmtTRY(entry)}</td>
@@ -3679,7 +3723,7 @@ async function loadActivePositions() {
         <td class="num ${pnlCls}">${fmtPct(pnlPct)}</td>
         <td class="num" style="color:var(--danger)">${sl ? fmtTRY(sl) : '--'}</td>
         <td class="num" style="color:var(--success)">${tp ? fmtTRY(tp) : '--'}</td>
-        <td>${status}</td>
+        <td>${status}<br>${paBadge}</td>
         <td><button class="btn-ghost danger" onclick="promptClosePosition(${p.id}, '${t}', ${p.qty}, ${entry})">Kapat</button></td>
       </tr>`;
     }).join('');
@@ -4319,6 +4363,29 @@ async function loadPlan() {
     open.forEach(p => { _midasOpenByTicker[p.ticker] = p; });
     pending.forEach(p => { _midasPendingByTicker[p.ticker] = p; });
   } catch {}
+
+  // Gün kalitesi + portföy risk widget'ı (paralel, başarısızsa sessiz geç)
+  Promise.all([
+    fetch('/api/portfolio/day-quality').then(r => r.json()).catch(() => null),
+    fetch('/api/risk/portfolio').then(r => r.json()).catch(() => null),
+  ]).then(([dq, port]) => {
+    const dqChip = document.getElementById('plan-day-quality');
+    const prChip = document.getElementById('plan-port-risk');
+    if (dq && dqChip) {
+      const lab = (dq.label || 'neutral').toUpperCase().replace('_', ' ');
+      const score = dq.score ?? 50;
+      const color = dq.label === 'strong' || dq.label === 'goal_reached' ? 'var(--success)'
+                  : dq.label === 'weak' || dq.label === 'stopped' ? 'var(--danger)' : 'rgba(255,255,255,0.85)';
+      dqChip.innerHTML = `📊 GÜN: <strong style="color:${color}">${lab}</strong> · ${score}/100`;
+      dqChip.style.display = 'inline-block';
+    }
+    if (port && prChip) {
+      const v = port.verdict || 'GREEN';
+      const color = v === 'GREEN' ? 'var(--success)' : v === 'YELLOW' ? 'var(--warning)' : 'var(--danger)';
+      prChip.innerHTML = `🛡 RİSK: <strong style="color:${color}">${v}</strong> · Yatırım %${(port.invested_pct ?? 0).toFixed(0)}`;
+      prChip.style.display = 'inline-block';
+    }
+  });
 
   const d = await api('/api/recommendations');
   if (!d) return;
