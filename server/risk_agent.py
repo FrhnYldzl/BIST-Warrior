@@ -387,23 +387,19 @@ def council_view(
     portfolio: dict,
     regime: str = "neutral",
     audit_results: list | None = None,
+    market_data: dict | None = None,
 ) -> dict:
     """
-    Tüm aday sinyallerin Risk Agent'tan geçmiş halini ve Gemini Council
-    sonucunu birleştirir. AI Council dashboard view'i bu çıktıyı kullanır.
+    Tüm aday sinyallerin Risk Agent'tan geçmiş halini, Gemini Council
+    sonucunu ve Signal Validator (kalite kapısı) çıktısını birleştirir.
 
-    Returns:
-        {
-          "summary": {greens, yellows, reds},
-          "items": [{
-              ticker, claude_action, claude_confidence,
-              risk: {verdict, score, warnings, recommended_qty, ...},
-              gemini: {verdict, reasoning} | None,
-              final_verdict: GREEN | YELLOW | RED,
-              final_reasoning: str
-          }, ...]
-        }
+    Quality flag'leri verdict'e dahil edilir:
+      • tp_already_hit / sl_invalid / no_reference_price → RED override
+      • stale_entry / shallow_alpha / rr_too_low / price_drift / sl_too_far → YELLOW
+      • temiz → mevcut Risk + Gemini verdict'ine göre
     """
+    import signal_validator as _sv
+
     audit_by_ticker = {}
     for r in (audit_results or []):
         t = r.get("ticker")
@@ -413,20 +409,37 @@ def council_view(
     items = []
     greens = yellows = reds = 0
 
+    HARD_REJECT_FLAGS = {"tp_already_hit", "sl_invalid", "no_reference_price"}
+    SOFT_WARN_FLAGS = {"stale_entry", "shallow_alpha", "rr_too_low", "price_drift",
+                       "sl_too_far", "sl_too_close", "deep_entry"}
+
     for sig in signals or []:
         ticker = sig.get("ticker") or sig.get("symbol") or ""
         risk = assess_signal(sig, portfolio, regime=regime)
+        quality = _sv.validate_signal(sig, market_data=market_data)
         gemini = audit_by_ticker.get(ticker)
+
+        # Quality flag'lere göre verdict ayarlamak
+        q_flags = set(quality.get("flags", []))
+        quality_verdict = "GREEN"
+        if HARD_REJECT_FLAGS & q_flags:
+            quality_verdict = "RED"
+        elif SOFT_WARN_FLAGS & q_flags:
+            quality_verdict = "YELLOW"
 
         # Final verdict: en kötü sonuç kazanır
         priorities = {"RED": 3, "YELLOW": 2, "GREEN": 1, "APPROVE": 1, "REJECT": 3, "MODIFY": 2}
         risk_p = priorities.get(risk["verdict"], 2)
         gem_p = priorities.get((gemini or {}).get("audit_verdict", "APPROVE"), 1)
-        worst = max(risk_p, gem_p)
+        qual_p = priorities.get(quality_verdict, 1)
+        worst = max(risk_p, gem_p, qual_p)
         final = "RED" if worst == 3 else "YELLOW" if worst == 2 else "GREEN"
 
         # Gerekçe
         reasons = []
+        # Quality önce — kullanıcının asıl şikayet ettiği konu
+        if quality.get("explanations"):
+            reasons.extend(quality["explanations"][:2])
         if risk["warnings"]:
             reasons.extend(risk["warnings"][:2])
         if gemini and gemini.get("audit_verdict") in ("REJECT", "MODIFY"):
@@ -434,7 +447,11 @@ def council_view(
             gr = (gemini.get("reasoning") or "")[:120]
             reasons.append(f"Gemini {gv}: {gr}")
         if not reasons and final == "GREEN":
-            reasons.append(f"Tüm filtreler geçildi (güven {sig.get('confidence')}/10, R/R 1:{risk['rr_ratio']})")
+            m = quality.get("metrics", {})
+            alpha = m.get("alpha_to_tp_pct")
+            reasons.append(
+                f"Tüm filtreler geçildi (güven {sig.get('confidence')}/10, R/R 1:{risk['rr_ratio']}, alpha %{alpha if alpha is not None else '?'})"
+            )
 
         item = {
             "ticker": ticker,
@@ -443,6 +460,8 @@ def council_view(
             "claude_strategy": sig.get("strategy"),
             "claude_reasoning": (sig.get("reasoning") or "")[:300],
             "risk": risk,
+            "quality": quality,
+            "quality_verdict": quality_verdict,
             "gemini": (
                 {
                     "verdict": gemini.get("audit_verdict"),

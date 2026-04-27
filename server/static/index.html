@@ -1240,6 +1240,9 @@ tr.trade-self td:first-child {
 <body>
 <div class="app">
   <div class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+  <div id="maintenance-banner" style="display:none;background:#7c2d12;color:#fff;padding:10px 16px;text-align:center;font-size:13px;font-weight:600;letter-spacing:0.05em;border-bottom:2px solid #ea580c">
+    🛑 BAKIM MODU AKTİF — Sistem dış API çağrılarını durdurdu (Claude/Gemini/scan kapalı). Dashboard sadece geçmiş veriyi gösterir.
+  </div>
   <header class="topbar">
     <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menüyü aç">☰</button>
     <div class="pill pill-red pill-dot live">BIST WARRIOR</div>
@@ -2517,6 +2520,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission().catch(() => {});
   }
+  // Bakım modu banner kontrolü
+  fetch('/api/health').then(r => r.json()).then(h => {
+    if (h && h.maintenance_mode) {
+      const b = document.getElementById('maintenance-banner');
+      if (b) b.style.display = 'block';
+      const scanBtn = document.getElementById('scan-btn');
+      if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = 'BAKIM'; scanBtn.style.opacity = 0.4; }
+    }
+  }).catch(() => {});
 });
 
 document.addEventListener('click', (e) => {

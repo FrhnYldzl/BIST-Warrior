@@ -96,6 +96,12 @@ async def lifespan(app: FastAPI):
     init_db()
     init_journal_v2()
     midas.init_midas_db()
+    if getattr(cfg, "MAINTENANCE_MODE", False):
+        # 🛑 Maliyet/API kill-switch aktif — scheduler ve dış çağrılar yok
+        print("🛑 MAINTENANCE_MODE = true — Scheduler ve dış API çağrıları DURDURULDU")
+        print("   Dashboard read-only. Açmak için Railway Variables → MAINTENANCE_MODE=false")
+        yield
+        return
     # Meridian Capital TR — analyst modunda AUTO_EXECUTE=False
     auto_exec = cfg.AUTO_EXECUTE and cfg.OPERATION_MODE != "analyst"
     sched.start(broker=broker, auto_execute=auto_exec, interval_minutes=10)
@@ -464,8 +470,8 @@ async def risk_portfolio():
 @app.get("/api/council")
 async def ai_council():
     """
-    AI Council: Claude sinyalleri + Gemini denetimi + Risk Agent değerlendirmesi.
-    Her sinyal için final_verdict (GREEN/YELLOW/RED) + tüm detaylar.
+    AI Council: Claude sinyalleri + Gemini denetimi + Risk Agent + Signal Validator.
+    Her sinyal için final_verdict (GREEN/YELLOW/RED) + quality flags.
     """
     import risk_agent as _ra
     last = sched.get_last_scan() or {}
@@ -475,7 +481,37 @@ async def ai_council():
         portfolio=portfolio,
         regime=last.get("regime", "neutral"),
         audit_results=last.get("audit_results", []),
+        market_data=last.get("market_data", {}),
     )
+
+
+@app.get("/api/signals/quality")
+async def signal_quality_summary():
+    """Son tarama sinyallerinin kalite kapı (validator) çıktıları."""
+    import signal_validator as _sv
+    last = sched.get_last_scan() or {}
+    decisions = last.get("decisions", []) or []
+    md = last.get("market_data", {}) or {}
+    annotated = _sv.annotate_decisions(decisions, market_data=md)
+    flag_counts: dict[str, int] = {}
+    for d in annotated:
+        for f in (d.get("quality") or {}).get("flags", []):
+            flag_counts[f] = flag_counts.get(f, 0) + 1
+    return {
+        "scan_time": last.get("timestamp"),
+        "total": len(annotated),
+        "passed": sum(1 for d in annotated if (d.get("quality") or {}).get("passed")),
+        "flag_counts": flag_counts,
+        "decisions": [
+            {
+                "ticker": d.get("ticker"),
+                "action": d.get("action"),
+                "confidence": d.get("confidence"),
+                "quality": d.get("quality"),
+            }
+            for d in annotated
+        ],
+    }
 
 
 # ─── Portfolio Agent ─────────────────────────────────────────────
@@ -523,6 +559,11 @@ async def portfolio_day_quality():
 @app.post("/api/scan-now")
 async def trigger_scan():
     """Manuel tarama baslat (dashboard'dan tetiklenebilir)."""
+    if getattr(cfg, "MAINTENANCE_MODE", False):
+        return JSONResponse(
+            {"status": "maintenance", "detail": "MAINTENANCE_MODE aktif — tarama yapılmıyor."},
+            status_code=503,
+        )
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(
         None, lambda: sched.run_scan(broker=broker, auto_execute=False)
@@ -1116,6 +1157,11 @@ async def daily_plan_generate():
     AI'ya günün planını çıkar talimatı ver.
     09:30 TRT cron'la otomatik çalışır, ama manuel de tetiklenebilir.
     """
+    if getattr(cfg, "MAINTENANCE_MODE", False):
+        return JSONResponse(
+            {"status": "maintenance", "detail": "MAINTENANCE_MODE aktif — AI çağrısı yapılmıyor."},
+            status_code=503,
+        )
     loop = asyncio.get_event_loop()
     market_data = await loop.run_in_executor(None, get_market_data)
     if "error" in market_data:
@@ -1269,8 +1315,9 @@ async def health():
         pass
 
     return {
-        "status": "ok",
+        "status": "maintenance" if getattr(cfg, "MAINTENANCE_MODE", False) else "ok",
         "version": "6.0",
+        "maintenance_mode": getattr(cfg, "MAINTENANCE_MODE", False),
         "ai_enabled": is_enabled(),
         "gemini_enabled": gemini_enabled(),
         "notify_enabled": notify_enabled(),

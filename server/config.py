@@ -60,6 +60,10 @@ except Exception:
 # ═══════════════════════════════════════════════════════════════
 # ÇALIŞMA MODU (Meridian Capital Türkiye — Midas Destekli)
 # ═══════════════════════════════════════════════════════════════
+# MAINTENANCE_MODE=true tüm dış API çağrılarını durdurur
+# (Claude, Gemini, yfinance scan). Dashboard read-only kalır.
+MAINTENANCE_MODE = (str(_get("MAINTENANCE_MODE", "false")).lower() in ("true", "1", "yes"))
+
 # "analyst" = AI sinyal üretir, kullanıcı Midas'tan elle emir girer (ÖNERİLEN)
 # "auto"    = Claude kararları broker'a direkt gider
 OPERATION_MODE = _get("OPERATION_MODE", "analyst").lower()
